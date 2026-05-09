@@ -7,6 +7,7 @@ import sys
 from datetime import datetime
 
 import subprocess
+import tempfile
 
 import yaml
 
@@ -120,10 +121,14 @@ def build_prompts(plan, history, feedback):
 
 
 def run_claude(system, user, model):
-    prompt = f"{system}\n\n---\n\n{user}" if system else user
     result = subprocess.run(
-        ["claude", "--model", model, "-p", prompt],
+        ["claude", "--model", model,
+         "--system-prompt", system,
+         "--tools", "",
+         "--no-session-persistence",
+         "-p", user],
         capture_output=True, text=True, timeout=120,
+        cwd=tempfile.gettempdir(),
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "claude CLI exited with non-zero status")

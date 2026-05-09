@@ -11,6 +11,7 @@ from datetime import datetime
 from email.header import decode_header
 
 import subprocess
+import tempfile
 
 import yaml
 
@@ -98,10 +99,14 @@ def classify_feedback(model, body, subject_map):
         "If feedback is general (applies to all subjects), include it under every folder key. "
         "Return only valid JSON."
     )
-    prompt = f"{system}\n\n---\n\n{user}"
     result = subprocess.run(
-        ["claude", "--model", model, "-p", prompt],
+        ["claude", "--model", model,
+         "--system-prompt", system,
+         "--tools", "",
+         "--no-session-persistence",
+         "-p", user],
         capture_output=True, text=True, timeout=60,
+        cwd=tempfile.gettempdir(),
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "claude CLI exited with non-zero status")

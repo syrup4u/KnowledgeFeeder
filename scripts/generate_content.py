@@ -45,6 +45,34 @@ def count_entries(history):
     return history.count("## Entry ")
 
 
+def extract_covered_topics(history):
+    """Return a list of topic strings logged in ## Entry blocks."""
+    topics = []
+    capture = False
+    for line in history.splitlines():
+        if line.strip() == "### Topic":
+            capture = True
+            continue
+        if capture:
+            text = line.strip()
+            if text and not text.startswith("#"):
+                topics.append(text)
+            capture = False
+    return topics
+
+
+def recent_entries(history, n=3):
+    """Return up to n most recent ## Entry blocks plus any compacted summary prefix."""
+    chunks = history.split("\n## Entry ")
+    prefix = chunks[0].strip()          # compacted summary if present, else empty
+    entries = ["\n## Entry " + c for c in chunks[1:]]
+    parts = []
+    if prefix:
+        parts.append(prefix)
+    parts.extend(entries[-n:])
+    return "\n\n".join(parts)
+
+
 def build_prompts(plan, history, feedback):
     length_map = {"short": "~300 words", "medium": "~600 words", "long": "~1200 words"}
     word_count = length_map.get(plan.get("content_length", "medium"), "~600 words")
@@ -68,9 +96,13 @@ def build_prompts(plan, history, feedback):
     user_parts = []
 
     if history:
-        user_parts.append(
-            f"Learning history so far (avoid repeating already-covered material):\n\n{history}"
-        )
+        covered = extract_covered_topics(history)
+        if covered:
+            topic_list = "\n".join(f"  - {t}" for t in covered)
+            user_parts.append(f"Topics already covered — do not repeat these:\n{topic_list}")
+        context = recent_entries(history, n=3)
+        if context:
+            user_parts.append(f"Recent sessions (for progression context):\n\n{context}")
     else:
         user_parts.append(
             "This is the first session for this subject. Start from the very beginning."

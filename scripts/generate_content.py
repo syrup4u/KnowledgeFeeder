@@ -6,7 +6,8 @@ import os
 import sys
 from datetime import datetime
 
-import anthropic
+import subprocess
+
 import yaml
 
 
@@ -118,17 +119,18 @@ def build_prompts(plan, history, feedback):
     return system, "\n\n".join(user_parts)
 
 
-def call_claude(client, model, system, user):
-    response = client.messages.create(
-        model=model,
-        max_tokens=2048,
-        system=system,
-        messages=[{"role": "user", "content": user}],
+def run_claude(system, user, model):
+    prompt = f"{system}\n\n---\n\n{user}" if system else user
+    result = subprocess.run(
+        ["claude", "--model", model, "-p", prompt],
+        capture_output=True, text=True, timeout=120,
     )
-    return response.content[0].text
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "claude CLI exited with non-zero status")
+    return result.stdout.strip()
 
 
-def compact_history(client, model, plan, history):
+def compact_history(model, plan, history):
     length_map = {"short": "concise (3–5 paragraphs)", "medium": "moderate (5–8 paragraphs)"}
     summary_len = length_map.get(plan.get("compaction_summary_length", "short"), "concise (3–5 paragraphs)")
 
@@ -144,13 +146,7 @@ def compact_history(client, model, plan, history):
         "Produce a summary suitable for informing a tutor what this student has already "
         "covered, so they do not repeat material unnecessarily."
     )
-    response = client.messages.create(
-        model=model,
-        max_tokens=1024,
-        system=system,
-        messages=[{"role": "user", "content": user}],
-    )
-    return response.content[0].text
+    return run_claude(system, user, model)
 
 
 def extract_topic(content):
@@ -180,16 +176,14 @@ def main():
     history = load_file(os.path.join(args.subject_dir, "history.md"))
     feedback = load_file(os.path.join(args.subject_dir, "feedback.md"))
 
-    api_key = config["anthropic"]["api_key"]
     model = config["anthropic"]["model"]
-    client = anthropic.Anthropic(api_key=api_key)
 
     system, user = build_prompts(plan, history, feedback)
 
     try:
-        content = call_claude(client, model, system, user)
-    except anthropic.APIError as e:
-        print(f"ERROR: Claude API call failed: {e}", file=sys.stderr)
+        content = run_claude(system, user, model)
+    except Exception as e:
+        print(f"ERROR: claude CLI call failed: {e}", file=sys.stderr)
         sys.exit(1)
 
     timestamp = datetime.now().isoformat(timespec="seconds")
@@ -200,7 +194,7 @@ def main():
     if count_entries(new_history) >= threshold:
         try:
             n = count_entries(new_history)
-            summary = compact_history(client, model, plan, new_history)
+            summary = compact_history(model, plan, new_history)
             new_history = (
                 f"## Compacted Summary (as of {timestamp}, covering {n} entries)\n\n"
                 f"{summary}\n\n---\n"

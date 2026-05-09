@@ -8,5 +8,4 @@ email:
   body_size_limit_kb: 50         # if combined body exceeds this, send as .md attachment
 
 anthropic:
-  api_key: "sk-ant-..."
   model: claude-sonnet-4-6

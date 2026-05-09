@@ -10,7 +10,8 @@ import sys
 from datetime import datetime
 from email.header import decode_header
 
-import anthropic
+import subprocess
+
 import yaml
 
 
@@ -76,7 +77,7 @@ def get_subject_map(subjects_dir):
     return result
 
 
-def classify_feedback(client, model, body, subject_map):
+def classify_feedback(model, body, subject_map):
     """Ask Claude to split the feedback body into per-subject pieces.
 
     Returns a dict {folder_name: feedback_text}.
@@ -97,13 +98,14 @@ def classify_feedback(client, model, body, subject_map):
         "If feedback is general (applies to all subjects), include it under every folder key. "
         "Return only valid JSON."
     )
-    response = client.messages.create(
-        model=model,
-        max_tokens=1024,
-        system=system,
-        messages=[{"role": "user", "content": user}],
+    prompt = f"{system}\n\n---\n\n{user}"
+    result = subprocess.run(
+        ["claude", "--model", model, "-p", prompt],
+        capture_output=True, text=True, timeout=60,
     )
-    raw = response.content[0].text.strip()
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "claude CLI exited with non-zero status")
+    raw = result.stdout.strip()
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
     return json.loads(raw)
@@ -131,7 +133,6 @@ def main():
         sys.exit(0)
 
     cfg = config["email"]
-    client = anthropic.Anthropic(api_key=config["anthropic"]["api_key"])
     model = config["anthropic"]["model"]
 
     try:
@@ -165,7 +166,7 @@ def main():
                     conn.store(mid, "+FLAGS", "\\Seen")
                     continue
 
-                classified = classify_feedback(client, model, body, subject_map)
+                classified = classify_feedback(model, body, subject_map)
 
                 dispatched = 0
                 for folder, text in classified.items():

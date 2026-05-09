@@ -176,12 +176,13 @@ def main():
     history = load_file(os.path.join(args.subject_dir, "history.md"))
     feedback = load_file(os.path.join(args.subject_dir, "feedback.md"))
 
-    model = config["anthropic"]["model"]
+    model_generation = config["anthropic"]["model_generation"]
+    model_utility = config["anthropic"]["model_utility"]
 
     system, user = build_prompts(plan, history, feedback)
 
     try:
-        content = run_claude(system, user, model)
+        content = run_claude(system, user, model_generation)
     except Exception as e:
         print(f"ERROR: claude CLI call failed: {e}", file=sys.stderr)
         sys.exit(1)
@@ -194,7 +195,7 @@ def main():
     if count_entries(new_history) >= threshold:
         try:
             n = count_entries(new_history)
-            summary = compact_history(model, plan, new_history)
+            summary = compact_history(model_utility, plan, new_history)
             new_history = (
                 f"## Compacted Summary (as of {timestamp}, covering {n} entries)\n\n"
                 f"{summary}\n\n---\n"

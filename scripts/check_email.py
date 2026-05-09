@@ -133,7 +133,7 @@ def main():
         sys.exit(0)
 
     cfg = config["email"]
-    model = config["anthropic"]["model"]
+    model = config["anthropic"]["model_utility"]
 
     try:
         conn = imaplib.IMAP4_SSL(cfg["imap_host"], cfg["imap_port"])

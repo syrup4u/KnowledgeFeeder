@@ -10,6 +10,7 @@ from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+import markdown as md
 import yaml
 
 
@@ -25,22 +26,33 @@ def load_config(path):
         return yaml.safe_load(f)
 
 
+_EMAIL_CSS = """
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+         line-height: 1.7; color: #222; max-width: 680px; margin: 0 auto; padding: 24px; }
+  h1, h2, h3, h4 { color: #111; margin-top: 1.6em; margin-bottom: 0.4em; }
+  h2 { font-size: 1.3em; border-bottom: 1px solid #e0e0e0; padding-bottom: 0.3em; }
+  h3 { font-size: 1.1em; }
+  code { font-family: 'SF Mono', Consolas, 'Courier New', monospace;
+         background: #f3f3f3; padding: 2px 5px; border-radius: 3px; font-size: 0.88em; }
+  pre { background: #f3f3f3; border: 1px solid #e0e0e0; border-radius: 6px;
+        padding: 14px 16px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: 0.87em; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ddd; padding: 7px 12px; text-align: left; }
+  th { background: #f3f3f3; font-weight: 600; }
+  blockquote { border-left: 4px solid #ccc; margin: 1em 0; padding: 4px 16px; color: #555; }
+  hr { border: none; border-top: 1px solid #e0e0e0; margin: 2em 0; }
+  ul, ol { padding-left: 1.5em; }
+  li { margin: 0.25em 0; }
+"""
+
+
 def text_to_html(text):
-    lines = []
-    for line in text.splitlines():
-        if line.startswith("=== ") and line.endswith(" ==="):
-            lines.append(f"<h2>{line[4:-4]}</h2>")
-        elif line.startswith("# "):
-            lines.append(f"<h3>{line[2:]}</h3>")
-        elif line.startswith("## "):
-            lines.append(f"<h4>{line[3:]}</h4>")
-        elif line == "---":
-            lines.append("<hr>")
-        elif line == "":
-            lines.append("<p></p>")
-        else:
-            lines.append(f"<p>{line}</p>")
-    return "<html><body>\n" + "\n".join(lines) + "\n</body></html>"
+    import re
+    # Convert === Subject === section headers to markdown ## headings
+    processed = re.sub(r"^=== (.+) ===$", r"## \1", text, flags=re.MULTILINE)
+    body = md.markdown(processed, extensions=["fenced_code", "tables"])
+    return f"<html><head><style>{_EMAIL_CSS}</style></head><body>\n{body}\n</body></html>"
 
 
 def build_message(cfg, subject_line, body_text, today):

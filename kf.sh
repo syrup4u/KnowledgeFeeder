@@ -120,8 +120,7 @@ cmd_run() {
     # Step 2: generate content for every subject
     log "Step 2: Generating content..."
     local body_file
-    body_file="$(mktemp /tmp/kf_body_XXXXXX.txt)"
-    trap 'rm -f "$body_file"' EXIT
+    body_file="$(mktemp /tmp/kf_body_XXXXXX)"
 
     local today
     today="$(date '+%Y-%m-%d')"
@@ -155,6 +154,7 @@ cmd_run() {
         --config "$CONFIG" \
         --body-file "$body_file" 2>>"$LOG"
 
+    rm -f "$body_file"
     log "=== Run complete ==="
 }
 

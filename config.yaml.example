@@ -1,0 +1,12 @@
+email:
+  smtp_host: smtp.gmail.com
+  smtp_port: 587
+  imap_host: imap.gmail.com
+  imap_port: 993
+  address: you@example.com       # sender = recipient (self-send)
+  password: "your-app-password"  # Gmail: use an App Password, not your main password
+  body_size_limit_kb: 50         # if combined body exceeds this, send as .md attachment
+
+anthropic:
+  api_key: "sk-ant-..."
+  model: claude-sonnet-4-6

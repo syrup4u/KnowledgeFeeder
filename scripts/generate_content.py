@@ -4,7 +4,7 @@
 import argparse
 import os
 import sys
-from datetime import datetime
+from datetime import date, datetime
 
 import subprocess
 import tempfile
@@ -41,6 +41,35 @@ def load_file(path):
         return ""
     with open(path) as f:
         return f.read().strip()
+
+
+_FREQUENCY_DAYS = {
+    "daily": 1,
+    "every_2_days": 2,
+    "every_3_days": 3,
+    "weekly": 7,
+    "biweekly": 14,
+}
+
+
+def last_entry_date(history):
+    for line in reversed(history.splitlines()):
+        if line.startswith("## Entry "):
+            try:
+                return datetime.fromisoformat(line[9:].strip()).date()
+            except ValueError:
+                continue
+    return None
+
+
+def is_due(plan, history):
+    interval = _FREQUENCY_DAYS.get(plan.get("frequency", "daily"), 1)
+    if interval <= 1:
+        return True
+    last = last_entry_date(history)
+    if last is None:
+        return True
+    return (date.today() - last).days >= interval
 
 
 def count_entries(history):
@@ -179,6 +208,10 @@ def main():
         sys.exit(1)
 
     history = load_file(os.path.join(args.subject_dir, "history.md"))
+
+    if not is_due(plan, history):
+        sys.exit(2)  # signal to kf.sh: not due today, skip silently
+
     feedback = load_file(os.path.join(args.subject_dir, "feedback.md"))
 
     model_generation = config["anthropic"]["model_generation"]

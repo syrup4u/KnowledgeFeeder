@@ -34,6 +34,7 @@ cmd_add() {
     cat > "$subject_dir/plan.md" << EOF
 ---
 subject: $name
+frequency: daily                  # daily | every_2_days | every_3_days | weekly | biweekly
 format: tutorial                  # tutorial | flashcards | qa | summary | mixed
 depth: intermediate               # beginner | intermediate | advanced
 content_length: medium            # short (~300w) | medium (~600w) | long (~1200w)
@@ -134,13 +135,20 @@ cmd_run() {
         slug="$(basename "$subject_dir")"
         log "  Generating: $slug"
 
-        if content="$(bash "$subject_dir/generate.sh" "$REPO_ROOT" 2>>"$LOG")"; then
-            printf "%s\n\n" "$content" >> "$body_file"
-            any_success=true
-        else
-            log "  ERROR: generation failed for $slug"
-            printf "=== %s ===\n\n[Content could not be generated today — check kf.log]\n\n" "$slug" >> "$body_file"
-        fi
+        content="$(bash "$subject_dir/generate.sh" "$REPO_ROOT" 2>>"$LOG")" && gen_exit=0 || gen_exit=$?
+        case $gen_exit in
+            0)
+                printf "%s\n\n" "$content" >> "$body_file"
+                any_success=true
+                ;;
+            2)
+                log "  Skipping: $slug (not due today)"
+                ;;
+            *)
+                log "  ERROR: generation failed for $slug (exit $gen_exit)"
+                printf "=== %s ===\n\n[Content could not be generated today — check kf.log]\n\n" "$slug" >> "$body_file"
+                ;;
+        esac
     done
 
     if [[ "$any_success" == "false" ]]; then

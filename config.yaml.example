@@ -8,5 +8,5 @@ email:
   body_size_limit_kb: 50         # if combined body exceeds this, send as .md attachment
 
 anthropic:
-  model_generation: claude-sonnet-4-6        # used for content generation
-  model_utility: claude-haiku-4-5-20251001   # used for compaction and feedback classification
+  model_generation: claude-sonnet-4-6        # content generation
+  model_utility: claude-haiku-4-5-20251001   # compaction and feedback classification

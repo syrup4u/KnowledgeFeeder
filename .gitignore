@@ -1,4 +1,5 @@
 config.yaml
+subjects/
 kf.log
 __pycache__/
 *.pyc

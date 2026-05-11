@@ -36,6 +36,36 @@ def load_plan(subject_dir):
     return yaml.safe_load(parts[1])
 
 
+def save_plan(subject_dir, plan):
+    plan_path = os.path.join(subject_dir, "plan.md")
+    with open(plan_path, "w") as f:
+        f.write("---\n")
+        yaml.dump(plan, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        f.write("---\n")
+
+
+def apply_feedback_to_plan(model, plan, feedback):
+    """Ask Claude to update plan fields based on feedback. Returns updated plan dict."""
+    plan_yaml = yaml.dump(plan, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    system = (
+        "You are a learning plan configurator. Given a YAML learning plan and user feedback, "
+        "update the relevant plan fields to incorporate the feedback permanently. "
+        "Return ONLY valid YAML with no markdown fences or extra text."
+    )
+    user = (
+        f"Current learning plan:\n\n{plan_yaml}\n\n"
+        f"User feedback:\n{feedback}\n\n"
+        "Update the plan fields to reflect this feedback. Keep all existing fields; "
+        "only modify what the feedback requires. Return the complete updated YAML."
+    )
+    raw = run_claude(system, user, model).strip()
+    if raw.startswith("```"):
+        lines = raw.splitlines()
+        end = -1 if lines[-1].strip() == "```" else len(lines)
+        raw = "\n".join(lines[1:end])
+    return yaml.safe_load(raw)
+
+
 def load_file(path):
     if not os.path.exists(path):
         return ""
@@ -104,7 +134,7 @@ def recent_entries(history, n=3):
     return "\n\n".join(parts)
 
 
-def build_prompts(plan, history, feedback):
+def build_prompts(plan, history):
     length_map = {"short": "~300 words", "medium": "~600 words", "long": "~1200 words"}
     word_count = length_map.get(plan.get("content_length", "medium"), "~600 words")
 
@@ -138,9 +168,6 @@ def build_prompts(plan, history, feedback):
         user_parts.append(
             "This is the first session for this subject. Start from the very beginning."
         )
-
-    if feedback:
-        user_parts.append(f"User feedback and requests to incorporate:\n\n{feedback}")
 
     user_parts.append(
         f"Generate the next {plan.get('format', 'tutorial')} session content for this subject."
@@ -217,7 +244,16 @@ def main():
     model_generation = config["anthropic"]["model_generation"]
     model_utility = config["anthropic"]["model_utility"]
 
-    system, user = build_prompts(plan, history, feedback)
+    if feedback:
+        try:
+            plan = apply_feedback_to_plan(model_utility, plan, feedback)
+            save_plan(args.subject_dir, plan)
+            with open(os.path.join(args.subject_dir, "feedback.md"), "w") as f:
+                f.write("")
+        except Exception as e:
+            print(f"WARNING: failed to apply feedback to plan, using original: {e}", file=sys.stderr)
+
+    system, user = build_prompts(plan, history)
 
     try:
         content = run_claude(system, user, model_generation)
@@ -243,10 +279,6 @@ def main():
 
     with open(os.path.join(args.subject_dir, "history.md"), "w") as f:
         f.write(new_history)
-
-    if feedback:
-        with open(os.path.join(args.subject_dir, "feedback.md"), "w") as f:
-            f.write("")
 
     subject_name = plan.get("subject", os.path.basename(args.subject_dir))
     print(f"=== {subject_name} ===\n")

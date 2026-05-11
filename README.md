@@ -31,7 +31,7 @@ That's it. Claude Code handles the rest.
 1. Each subject lives in its own folder under `subjects/` with a `plan.md` defining format, depth, frequency, and topics.
 2. `./kf.sh run` fetches feedback from your inbox, generates content for every subject that is due today, and sends one combined email.
 3. Reply to the email in plain English. The next run uses Claude to classify your reply by subject and queues it as feedback.
-4. Feedback is incorporated into the next generation and then cleared automatically.
+4. Before generating, feedback is applied by Claude to permanently update the relevant fields in `plan.md` (depth, focus topics, extra instructions, etc.), then cleared. All future sessions reflect the change.
 5. After a configurable number of entries, `history.md` is compacted by Claude to keep context lean.
 
 ---

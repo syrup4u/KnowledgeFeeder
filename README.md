@@ -4,6 +4,10 @@ A personal learning system that generates daily AI-powered content for any subje
 
 Content is generated via the `claude` CLI using Sonnet for content and Haiku for lighter tasks (feedback classification, history compaction).
 
+## Support
+
+Currently it only supports running on `Mac`.
+
 ---
 
 ## Quick Start
@@ -106,3 +110,9 @@ KnowledgeFeeder/
         ├── feedback.md          # queued feedback from email replies; cleared after use
         └── generate.sh          # per-subject wrapper, called by kf.sh run
 ```
+
+---
+
+## License
+
+MIT

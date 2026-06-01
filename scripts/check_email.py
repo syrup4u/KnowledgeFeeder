@@ -106,6 +106,7 @@ def classify_feedback(model, body, subject_map):
          "--no-session-persistence",
          "-p", user],
         capture_output=True, text=True, timeout=60,
+        stdin=subprocess.DEVNULL,
         cwd=tempfile.gettempdir(),
     )
     if result.returncode != 0:

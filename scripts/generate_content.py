@@ -170,6 +170,7 @@ def run_claude(system, user, model):
          "--no-session-persistence",
          "-p", user],
         capture_output=True, text=True, timeout=120,
+        stdin=subprocess.DEVNULL,
         cwd=tempfile.gettempdir(),
     )
     if result.returncode != 0:

@@ -100,6 +100,12 @@ cmd_update() {
 
 cmd_run() {
     local filter="${1:-}"
+
+    # Warn if a previous run left errors unresolved
+    if [[ -s "$LOG" ]] && grep -q "ERROR" "$LOG"; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: kf.log has unresolved errors — run /kf-doctor in Claude Code to diagnose before continuing."
+    fi
+
     log "=== KnowledgeFeeder run started ==="
 
     if [[ ! -f "$CONFIG" ]]; then
@@ -121,6 +127,8 @@ cmd_run() {
     # Step 2: generate and send one email per subject
     log "Step 2: Generating and sending content..."
 
+    local had_error=false
+
     for subject_dir in "$SUBJECTS_DIR"/*/; do
         [[ -d "$subject_dir" ]] || continue
         local slug
@@ -140,24 +148,34 @@ cmd_run() {
         case $gen_exit in
             0)
                 printf "%s\n" "$content" > "$body_file"
-                "$PYTHON" "$REPO_ROOT/scripts/send_email.py" \
+                if "$PYTHON" "$REPO_ROOT/scripts/send_email.py" \
                     --config "$CONFIG" \
                     --body-file "$body_file" \
-                    --subject-name "$slug" 2>>"$LOG" \
-                    && log "  Sent: $slug" \
-                    || log "  ERROR: failed to send email for $slug"
+                    --subject-name "$slug" 2>>"$LOG"; then
+                    log "  Sent: $slug"
+                else
+                    log "  ERROR: failed to send email for $slug"
+                    had_error=true
+                fi
                 ;;
             2)
                 log "  Skipping: $slug (not due today)"
                 ;;
             *)
                 log "  ERROR: generation failed for $slug (exit $gen_exit)"
+                had_error=true
                 ;;
         esac
         rm -f "$body_file"
     done
 
     log "=== Run complete ==="
+
+    if [[ "$had_error" == "false" ]]; then
+        : > "$LOG"
+    else
+        log "Run finished with errors — see above. Use /kf-doctor in Claude Code to diagnose."
+    fi
 }
 
 # ── dispatch ──────────────────────────────────────────────────────────────────

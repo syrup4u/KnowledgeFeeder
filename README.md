@@ -2,7 +2,7 @@
 
 A personal learning system that generates daily AI-powered content for any subject you want to study and delivers it to your inbox. Reply to the email in plain English to give feedback — the system figures out which subjects you mean and applies it next time.
 
-Content is generated via the `claude` CLI using Sonnet for content and Haiku for lighter tasks (feedback classification, history compaction).
+Content is generated via the `claude` CLI using Sonnet for content and Haiku for lighter tasks (feedback classification).
 
 ## Support
 
@@ -24,7 +24,6 @@ Currently it only supports running on `Mac`.
 |---|---|
 | `/kf-setup` | Install dependencies, verify environment, check your config |
 | `/kf-add` | Add a new learning subject interactively |
-| `/kf-schedule` | Set up a daily scheduled run on macOS |
 
 That's it. Claude Code handles the rest.
 
@@ -33,10 +32,10 @@ That's it. Claude Code handles the rest.
 ## How it works
 
 1. Each subject lives in its own folder under `subjects/` with a `plan.md` defining format, depth, frequency, and topics.
-2. `./kf.sh run` fetches feedback from your inbox, generates content for every subject that is due today, and sends one combined email.
+2. `./kf.sh run` fetches feedback from your inbox, generates content for every subject that is due today, and sends one email per subject.
 3. Reply to the email in plain English. The next run uses Claude to classify your reply by subject and queues it as feedback.
-4. Before generating, feedback is applied by Claude to permanently update the relevant fields in `plan.md` (depth, focus topics, extra instructions, etc.), then cleared. All future sessions reflect the change.
-5. After a configurable number of entries, `history.md` is compacted by Claude to keep context lean.
+4. Before generating, feedback is applied by Claude to permanently update the relevant fields in `plan.md` (depth, focus topics, extra instructions, frequency, etc.), then cleared. All future sessions reflect the change.
+5. `history.md` stores one line per session (the topic covered) — used to avoid repeating material.
 
 ---
 
@@ -56,7 +55,7 @@ email:
 
 anthropic:
   model_generation: claude-sonnet-4-6        # content generation
-  model_utility: claude-haiku-4-5-20251001   # compaction and feedback classification
+  model_utility: claude-haiku-4-5-20251001   # feedback classification
 ```
 
 ### plan.md fields
@@ -64,12 +63,10 @@ anthropic:
 ```yaml
 ---
 subject: Japanese Learning
-frequency: daily              # daily | every_2_days | every_3_days | weekly | biweekly
+frequency: daily              # daily | every_2_days | every_3_days | weekly | biweekly | never
 format: tutorial              # tutorial | flashcards | qa | summary | mixed
 depth: intermediate           # beginner | intermediate | advanced
 content_length: medium        # short (~300w) | medium (~600w) | long (~1200w)
-compaction_threshold: 20      # compact history.md after this many entries
-compaction_summary_length: short  # short | medium
 focus_topics:
   - grammar patterns
   - vocabulary in context
@@ -79,12 +76,15 @@ extra_instructions: |
 ---
 ```
 
+Set `frequency: never` to disable a subject without deleting it. Sending the feedback "unsubscribe from this subject" will set this automatically.
+
 ### CLI
 
 | Command | Description |
 |---|---|
 | `./kf.sh add "Subject Name"` | Scaffold a new subject folder with a template `plan.md` |
-| `./kf.sh run` | Full pipeline: fetch feedback → generate due subjects → send email |
+| `./kf.sh run` | Full pipeline: fetch feedback → generate due subjects → send one email per subject |
+| `./kf.sh run <slug>` | Same, but for a single subject only |
 | `./kf.sh update` | Fetch inbox and dispatch feedback only |
 | `./kf.sh list` | List all subjects |
 
@@ -97,16 +97,15 @@ KnowledgeFeeder/
 ├── requirements.txt             # pip dependencies (pyyaml, markdown)
 ├── .claude/commands/
 │   ├── kf-setup.md              # /kf-setup command
-│   ├── kf-add.md                # /kf-add command
-│   └── kf-schedule.md           # /kf-schedule command
+│   └── kf-add.md                # /kf-add command
 ├── scripts/
 │   ├── generate_content.py      # claude CLI: generate content, manage history
-│   ├── send_email.py            # SMTP: send combined email or .md attachment
+│   ├── send_email.py            # SMTP: send email per subject
 │   └── check_email.py           # IMAP: fetch replies, classify feedback via claude CLI
 └── subjects/
     └── <subject_name>/
         ├── plan.md              # learning plan and settings
-        ├── history.md           # append log of generated sessions; compacted automatically
+        ├── history.md           # one-line topic log per session
         ├── feedback.md          # queued feedback from email replies; cleared after use
         └── generate.sh          # per-subject wrapper, called by kf.sh run
 ```

@@ -50,6 +50,8 @@ def apply_feedback_to_plan(model, plan, feedback):
     system = (
         "You are a learning plan configurator. Given a YAML learning plan and user feedback, "
         "update the relevant plan fields to incorporate the feedback permanently. "
+        "Valid frequency values: daily, every_2_days, every_3_days, weekly, biweekly, never. "
+        "Use 'never' to disable/unsubscribe a subject. "
         "Return ONLY valid YAML with no markdown fences or extra text."
     )
     user = (
@@ -93,7 +95,10 @@ def last_entry_date(history):
 
 
 def is_due(plan, history):
-    interval = _FREQUENCY_DAYS.get(plan.get("frequency", "daily"), 1)
+    freq = plan.get("frequency", "daily")
+    if freq == "never":
+        return False
+    interval = _FREQUENCY_DAYS.get(freq, 1)
     if interval <= 1:
         return True
     last = last_entry_date(history)
@@ -102,36 +107,20 @@ def is_due(plan, history):
     return (date.today() - last).days >= interval
 
 
-def count_entries(history):
-    return history.count("## Entry ")
-
-
 def extract_covered_topics(history):
     """Return a list of topic strings logged in ## Entry blocks."""
     topics = []
-    capture = False
-    for line in history.splitlines():
-        if line.strip() == "### Topic":
-            capture = True
-            continue
-        if capture:
-            text = line.strip()
-            if text and not text.startswith("#"):
-                topics.append(text)
-            capture = False
+    lines = history.splitlines()
+    i = 0
+    while i < len(lines):
+        if lines[i].startswith("## Entry "):
+            for j in range(i + 1, len(lines)):
+                text = lines[j].strip()
+                if text and text != "---" and not text.startswith("#"):
+                    topics.append(text)
+                    break
+        i += 1
     return topics
-
-
-def recent_entries(history, n=3):
-    """Return up to n most recent ## Entry blocks plus any compacted summary prefix."""
-    chunks = history.split("\n## Entry ")
-    prefix = chunks[0].strip()          # compacted summary if present, else empty
-    entries = ["\n## Entry " + c for c in chunks[1:]]
-    parts = []
-    if prefix:
-        parts.append(prefix)
-    parts.extend(entries[-n:])
-    return "\n\n".join(parts)
 
 
 def build_prompts(plan, history):
@@ -161,9 +150,6 @@ def build_prompts(plan, history):
         if covered:
             topic_list = "\n".join(f"  - {t}" for t in covered)
             user_parts.append(f"Topics already covered — do not repeat these:\n{topic_list}")
-        context = recent_entries(history, n=3)
-        if context:
-            user_parts.append(f"Recent sessions (for progression context):\n\n{context}")
     else:
         user_parts.append(
             "This is the first session for this subject. Start from the very beginning."
@@ -191,25 +177,6 @@ def run_claude(system, user, model):
     return result.stdout.strip()
 
 
-def compact_history(model, plan, history):
-    length_map = {"short": "concise (3–5 paragraphs)", "medium": "moderate (5–8 paragraphs)"}
-    summary_len = length_map.get(plan.get("compaction_summary_length", "short"), "concise (3–5 paragraphs)")
-
-    system = (
-        "You are a learning history summarizer. Distill a log of past learning sessions "
-        "into a structured summary that preserves key concepts, examples, and progression."
-    )
-    user = (
-        f"Subject: {plan['subject']}\n"
-        f"Depth level: {plan.get('depth', 'intermediate')}\n"
-        f"Summary length: {summary_len}\n\n"
-        f"Full learning history to compact:\n\n{history}\n\n"
-        "Produce a summary suitable for informing a tutor what this student has already "
-        "covered, so they do not repeat material unnecessarily."
-    )
-    return run_claude(system, user, model)
-
-
 def extract_topic(content):
     for line in content.splitlines():
         line = line.strip()
@@ -220,8 +187,8 @@ def extract_topic(content):
     return "Learning session"
 
 
-def format_entry(timestamp, topic, content):
-    return f"## Entry {timestamp}\n\n### Topic\n{topic}\n\n### Content\n{content}\n\n---\n"
+def format_entry(timestamp, topic):
+    return f"## Entry {timestamp}\n\n{topic}\n\n---\n"
 
 
 def main():
@@ -262,20 +229,8 @@ def main():
         sys.exit(1)
 
     timestamp = datetime.now().isoformat(timespec="seconds")
-    entry = format_entry(timestamp, extract_topic(content), content)
+    entry = format_entry(timestamp, extract_topic(content))
     new_history = (history + "\n\n" + entry).lstrip() if history else entry
-
-    threshold = int(plan.get("compaction_threshold", 20))
-    if count_entries(new_history) >= threshold:
-        try:
-            n = count_entries(new_history)
-            summary = compact_history(model_utility, plan, new_history)
-            new_history = (
-                f"## Compacted Summary (as of {timestamp}, covering {n} entries)\n\n"
-                f"{summary}\n\n---\n"
-            )
-        except Exception as e:
-            print(f"WARNING: compaction failed, keeping full history: {e}", file=sys.stderr)
 
     with open(os.path.join(args.subject_dir, "history.md"), "w") as f:
         f.write(new_history)

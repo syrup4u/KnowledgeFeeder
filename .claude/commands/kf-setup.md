@@ -1,6 +1,8 @@
 Set up KnowledgeFeeder by doing the following steps in order:
 
-1. Run `pip3 install -r requirements.txt` and confirm it succeeds.
+1. Create a venv and install dependencies:
+   - Run `python3 -m venv .venv` to create the venv (skip if `.venv/` already exists).
+   - Run `.venv/bin/pip install -r requirements.txt` and confirm it succeeds.
 2. Run `claude --version` to confirm the CLI is available.
 3. Check whether `config.yaml` exists.
    - If it does not exist: copy `config.yaml.example` to `config.yaml`, then tell the user exactly what they need to fill in (email address, app password). For Gmail, remind them to use an App Password from https://myaccount.google.com/apppasswords, not their main password.

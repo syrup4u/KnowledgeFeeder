@@ -18,6 +18,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--config", required=True)
     p.add_argument("--body-file", required=True)
+    p.add_argument("--subject-name", default="")
     return p.parse_args()
 
 
@@ -102,7 +103,10 @@ def main():
 
     cfg = config["email"]
     today = date.today().isoformat()
-    subject_line = f"KnowledgeFeeder — {today}"
+    if args.subject_name:
+        subject_line = f"KnowledgeFeeder — {args.subject_name} — {today}"
+    else:
+        subject_line = f"KnowledgeFeeder — {today}"
 
     msg, attached = build_message(cfg, subject_line, body_text, today)
 

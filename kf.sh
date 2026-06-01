@@ -5,6 +5,7 @@ REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 SUBJECTS_DIR="$REPO_ROOT/subjects"
 CONFIG="$REPO_ROOT/config.yaml"
 LOG="$REPO_ROOT/kf.log"
+PYTHON="$REPO_ROOT/.venv/bin/python3"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"
@@ -34,12 +35,10 @@ cmd_add() {
     cat > "$subject_dir/plan.md" << EOF
 ---
 subject: $name
-frequency: daily                  # daily | every_2_days | every_3_days | weekly | biweekly
+frequency: daily                  # daily | every_2_days | every_3_days | weekly | biweekly | never
 format: tutorial                  # tutorial | flashcards | qa | summary | mixed
 depth: intermediate               # beginner | intermediate | advanced
 content_length: medium            # short (~300w) | medium (~600w) | long (~1200w)
-compaction_threshold: 20          # compact history.md after this many entries
-compaction_summary_length: short  # short | medium
 focus_topics:
   - # FILL IN: e.g. "core concepts"
   - # FILL IN: e.g. "practical examples"
@@ -60,7 +59,7 @@ EOF
 set -euo pipefail
 REPO_ROOT="${1:?Usage: generate.sh <REPO_ROOT>}"
 SUBJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-exec python3 "$REPO_ROOT/scripts/generate_content.py" \
+exec "$REPO_ROOT/.venv/bin/python3" "$REPO_ROOT/scripts/generate_content.py" \
     --subject-dir "$SUBJECT_DIR" \
     --config "$REPO_ROOT/config.yaml"
 GENEOF
@@ -92,7 +91,7 @@ cmd_list() {
 
 cmd_update() {
     log "Fetching feedback from inbox..."
-    python3 "$REPO_ROOT/scripts/check_email.py" \
+    "$PYTHON" "$REPO_ROOT/scripts/check_email.py" \
         --config "$CONFIG" \
         --subjects-dir "$SUBJECTS_DIR"
 }
@@ -100,6 +99,7 @@ cmd_update() {
 # ── run ───────────────────────────────────────────────────────────────────────
 
 cmd_run() {
+    local filter="${1:-}"
     log "=== KnowledgeFeeder run started ==="
 
     if [[ ! -f "$CONFIG" ]]; then
@@ -114,55 +114,49 @@ cmd_run() {
 
     # Step 1: pull in any queued feedback
     log "Step 1: Fetching feedback..."
-    python3 "$REPO_ROOT/scripts/check_email.py" \
+    "$PYTHON" "$REPO_ROOT/scripts/check_email.py" \
         --config "$CONFIG" \
         --subjects-dir "$SUBJECTS_DIR" 2>>"$LOG" || log "WARNING: feedback fetch failed, continuing"
 
-    # Step 2: generate content for every subject
-    log "Step 2: Generating content..."
-    local body_file
-    body_file="$(mktemp /tmp/kf_body_XXXXXX)"
-
-    local today
-    today="$(date '+%Y-%m-%d')"
-    printf "KnowledgeFeeder Daily Push — %s\n\n" "$today" >> "$body_file"
-
-    local any_success=false
+    # Step 2: generate and send one email per subject
+    log "Step 2: Generating and sending content..."
 
     for subject_dir in "$SUBJECTS_DIR"/*/; do
         [[ -d "$subject_dir" ]] || continue
         local slug
         slug="$(basename "$subject_dir")"
-        log "  Generating: $slug"
 
+        if [[ -n "$filter" && "$slug" != "$filter" ]]; then
+            continue
+        fi
+
+        log "  Processing: $slug"
+
+        local body_file
+        body_file="$(mktemp /tmp/kf_body_XXXXXX)"
+
+        local content gen_exit
         content="$(bash "$subject_dir/generate.sh" "$REPO_ROOT" 2>>"$LOG")" && gen_exit=0 || gen_exit=$?
         case $gen_exit in
             0)
-                printf "%s\n\n" "$content" >> "$body_file"
-                any_success=true
+                printf "%s\n" "$content" > "$body_file"
+                "$PYTHON" "$REPO_ROOT/scripts/send_email.py" \
+                    --config "$CONFIG" \
+                    --body-file "$body_file" \
+                    --subject-name "$slug" 2>>"$LOG" \
+                    && log "  Sent: $slug" \
+                    || log "  ERROR: failed to send email for $slug"
                 ;;
             2)
                 log "  Skipping: $slug (not due today)"
                 ;;
             *)
                 log "  ERROR: generation failed for $slug (exit $gen_exit)"
-                printf "=== %s ===\n\n[Content could not be generated today — check kf.log]\n\n" "$slug" >> "$body_file"
                 ;;
         esac
+        rm -f "$body_file"
     done
 
-    if [[ "$any_success" == "false" ]]; then
-        log "ERROR: all subjects failed to generate. Aborting."
-        exit 1
-    fi
-
-    # Step 3: send email
-    log "Step 3: Sending email..."
-    python3 "$REPO_ROOT/scripts/send_email.py" \
-        --config "$CONFIG" \
-        --body-file "$body_file" 2>>"$LOG"
-
-    rm -f "$body_file"
     log "=== Run complete ==="
 }
 
@@ -170,7 +164,7 @@ cmd_run() {
 
 case "${1:-}" in
     add)    cmd_add "${2:-}" ;;
-    run)    cmd_run ;;
+    run)    cmd_run "${2:-}" ;;
     update) cmd_update ;;
     list)   cmd_list ;;
     *)
@@ -179,7 +173,7 @@ Usage: kf.sh <command> [args]
 
 Commands:
   add "Subject Name"   Create a new subject folder with template files
-  run                  Full pipeline: fetch feedback → generate → send email
+  run [slug]           Full pipeline: fetch feedback → generate → send email (all subjects, or one)
   update               Fetch inbox and dispatch feedback only
   list                 List all subjects
 USAGE

@@ -110,7 +110,8 @@ def classify_feedback(model, body, subject_map):
         cwd=tempfile.gettempdir(),
     )
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "claude CLI exited with non-zero status")
+        detail = result.stderr.strip() or result.stdout.strip() or "claude CLI exited with non-zero status"
+        raise RuntimeError(f"exit {result.returncode}: {detail}")
     raw = result.stdout.strip()
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]

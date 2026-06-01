@@ -174,7 +174,8 @@ def run_claude(system, user, model):
         cwd=tempfile.gettempdir(),
     )
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "claude CLI exited with non-zero status")
+        detail = result.stderr.strip() or result.stdout.strip() or "claude CLI exited with non-zero status"
+        raise RuntimeError(f"exit {result.returncode}: {detail}")
     return result.stdout.strip()
 
 
